@@ -1,0 +1,129 @@
+---
+title: "NYC Shooting Project"
+author: "student"
+date: "7/12/2021"
+output:
+  pdf_document: default
+---
+
+
+
+### NYC Shooting:
+
+This is a breakdown of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year. (source: <https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic>)
+
+
+### Questions:
+
+1) What is the trend with regard to years?  
+2) What is the lowest/highest number of incidents per victim age group? 
+
+### Bias:
+Coming from New York, by bias was based on pride. Finding out what borough had the highest number was my focus and the age groups within that area. I think I wanted to prove the area that I grew up in had a lower incident rate than others. In regards to selecting the data, well, that was the assignment, but I asked the question if I would do this on my own, and yes, I would – so that needs to be accounted for as well. Even though this RMD file does not have further studies, I reviewed later, other factors, including race, age, and murder count. These to have a question of bias attached to them.
+
+Note: Other bias reasons: A byproduct of limited knowledge of the field of analytics & knowledge of R, which is the reason for taking said class.
+
+
+
+### Loading R Packages:
+```{r library, echo=FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggplot2) # - part of tidyverse
+library(dplyr) # - part of tidyverse
+```
+
+
+### Reading in the Data:
+```{r reading, echo=TRUE}
+#url_in <-"https://data.cityofnewyork.us/resource/833y-fsy8.csv" - appears to be an issue, seek other path
+url_in <-"https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+dataShooting <- read.csv(url_in)
+```
+
+### Summary of Data:
+```{r reviwing, echo=TRUE}
+summary(dataShooting)
+head(dataShooting)
+# DETAILS OF SUMMARY:
+  # INCIDENT_KEY: provides a unique key/id to every row
+  # OCCUR_DATE: provides date of incident
+  # OCCUR_TIME: provides time of incident
+  # BORO: provides the location per boro (five boros to NY City)
+  # PRECINCT: provides the police station reasonable 
+  # JURISDICTION_CODE: provides police station location and j code
+  # LOCATION_DESC: provides location of incident
+  # STATISTICAL_MURDER_FLAG: provides details of shooting (fatal)
+  # PERP_AGE_GROUP, PERP_SEX, PERP_RACE: provides details of perpetrator
+  # VIC_AGE_GROUP, VIC_SEX, VIC_RACE: provides details of victim
+  # X_COORD_CD, Y_COORD_CD, LATITUDE, LONGITUDE, GEOCODED_COLUMN: provides location information of incident
+
+```
+
+### # TIDY DATA (a wee bit):
+```{r cleaning, echo=TRUE}
+
+#dataShooting <- separate(dataShooting,occur_date, into = c("date", "timeRemove"), sep = "T") - basic, works, but issues with testing
+#dataShooting$BORO <- as.factor(dataShooting$BORO) - factor works, but issues with plots, dropped!
+
+dataShooting <- mutate(dataShooting, OCCUR_DATE = mdy(OCCUR_DATE), dsSHOOTINGS = 1,
+                       YEARS = format_ISO8601(OCCUR_DATE, precision = "y"),
+                       YEAR_MONTHS = format_ISO8601(OCCUR_DATE, precision = "ym"))
+
+```
+### SELECTING COLUMNS:
+```{r selectingcolumns, echo=TRUE}
+dsPlotReview <- select(dataShooting, OCCUR_DATE, VIC_AGE_GROUP, YEAR_MONTHS, YEARS, OCCUR_TIME, BORO, dsSHOOTINGS) %>%
+  filter(dsSHOOTINGS == "1") 
+```
+
+### Three Basic Visualizations:
+```{r visual, echo=TRUE}
+
+dsPlotOne <- dsPlotReview %>%
+  group_by(BORO) %>%
+  count()
+
+dsPlotViewOne <-ggplot(dsPlotOne, aes(x = BORO, weight =n)) +
+  geom_bar(width = .75, fill = "blue") +
+  labs(x = "City of NYC: Boroughs", y = "Number of Shootings", 
+       title = "A View by NYC Boroughs")
+plot(dsPlotViewOne)
+
+#--------------------------------------------------------------
+dsPlotTwo <- dsPlotReview %>%
+  group_by(YEARS) %>%
+  count()
+
+dsPlotViewTwo <-ggplot(dsPlotTwo, aes(x = YEARS, weight =n)) +
+  geom_bar(width = .75, fill = "purple") +
+  labs(x = "Years: 2006 to 2020", y = "Number of Shootings", 
+       title = "A View by The Years")
+plot(dsPlotViewTwo)
+
+#--------------------------------------------------------------
+dsPlotThree <- dsPlotReview %>%
+  group_by(VIC_AGE_GROUP) %>%
+  filter(VIC_AGE_GROUP != "UNKNOWN") %>%
+  count()
+
+dsPlotViewThree <-ggplot(dsPlotThree, aes(x = VIC_AGE_GROUP, weight =n)) +
+  geom_bar(width = .75, fill = "orange") +
+  labs(x = "Victims Age Group", y = "Number of Shootings", 
+       title = "A View by Victims Age Group")
+plot(dsPlotViewThree)
+
+```
+
+## Conclusion:
+
+### Review of Bias:
+Coming from New York, by bias was based on pride. Finding out what borough had the highest number was my focus and the age groups within that area. I think I wanted to prove the area that I grew up in had a lower incident rate than others. In regards to selecting the data, well, that was the assignment, but I asked the question if I would do this on my own, and yes, I would – so that needs to be accounted for as well. Even though this RMD file does not have further studies, I reviewed later, other factors, including race, age, and murder count. These to have a question of bias attached to them.
+
+Note: Other bias reasons: A byproduct of limited knowledge of the field of analytics & knowledge of R, which is the reason for taking said class.
+
+### Question & Answers: 
+1) What is the trend with regard to years? - According to the data, incidents were going down, but made a sharp turn up during the past year (2020).  
+
+2) What is the lowest/highest number of incidents per victim age group?  - According to the data, the age group of "25-44" has the greatest number incidents. 
+

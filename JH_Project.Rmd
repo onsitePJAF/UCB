@@ -1,0 +1,296 @@
+---
+title: "John Hopkins COVID-19 Project"
+author: "student"
+date: "7/22/2021"
+output:
+ pdf_document: default
+---
+
+
+
+### John Hopkins COVID-19:
+
+This is a breakdown of COVID-19 data from John Hopkins github.com site. (source: <https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_time_series>)
+
+
+### Loading R Packages:
+```{r library, echo=FALSE}
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2) # - part of tidyverse
+library(dplyr) # - part of tidyverse
+```
+
+
+### Reading-in: Data:
+```{r reading, warning=FALSE, message=FALSE}
+url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+
+file_names <- c("time_series_covid19_confirmed_global.csv",
+                "time_series_covid19_deaths_global.csv",
+                "time_series_covid19_confirmed_US.csv",
+                "time_series_covid19_deaths_US.csv")
+
+urls <- str_c(url_in, file_names)
+
+global_cases <- read_csv(urls[1])
+global_deaths <- read_csv(urls[2])
+US_cases <- read_csv(urls[3])
+US_deaths <- read_csv(urls[4])
+
+```
+
+### Summary of Data:
+```{r reviwing, warning=FALSE, message=FALSE}
+head(US_cases)
+head(US_deaths)
+
+# Top Fields (short list):
+# * Province_State: US State
+# * Country_Region: Country Part
+# * Last_Update: Date of last update
+# * Lat: Global Coordinates
+# * Long: Global Coordinates
+# * Confirmed: Number of Cases
+# * Deaths: Number of deaths
+# * Recovered: Number of recovered
+# * Active: Number of active cases
+# * Incident_Rate: Incidents of cases
+# * Total_Test_Results: Number of tests (have been)
+# * People_Hospitalized: Number of people need to be put in hospital
+
+```
+
+### # TIDY DATA (a wee bit):
+```{r cleaning, warning=FALSE, message=FALSE}
+
+global_cases <- global_cases %>% 
+  pivot_longer(cols = -c('Province/State', 'Country/Region', Lat, Long), names_to = "date", values_to = "cases") %>%
+  select (-c(Lat, Long))
+
+global_deaths <- global_deaths %>%
+  pivot_longer(cols = -c('Province/State', 'Country/Region', Lat, Long), names_to = "date", values_to = "deaths") %>%
+  select (-c(Lat, Long))
+
+global <- global_cases %>%
+  full_join(global_deaths) %>%
+  rename(Country_Region = 'Country/Region', Province_State = 'Province/State') %>%
+  mutate(date = mdy(date))
+
+global <- global %>% filter(cases > 0)
+
+US_cases <- US_cases %>%
+  pivot_longer(cols = -(UID:Combined_Key),
+               names_to = "date",
+               values_to = "cases") %>%
+  select(Admin2:cases) %>%
+  mutate(date = mdy(date)) %>%
+  select(-c(Lat, Long_))
+
+US_deaths <- US_deaths %>%
+  pivot_longer(cols = -(UID:Population),
+               names_to = "date",
+               values_to = "deaths") %>%
+  select(Admin2:deaths) %>%
+  mutate(date = mdy(date)) %>%
+  select(-c(Lat, Long_))
+
+US <- US_cases %>%
+  full_join (US_deaths)
+
+global <- global %>%
+  unite("Combined_Key",
+        c(Province_State, Country_Region),
+        sep = ", ",
+        na.rm = TRUE,
+        remove = FALSE)
+
+uid_lookup_url <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/UID_ISO_FIPS_LookUp_Table.csv"
+
+uid <- read_csv(uid_lookup_url) %>%
+  select(-c(Lat, Long_, Combined_Key, code3, iso2, iso3, Admin2))
+
+global <- global %>%
+  left_join(uid, by = c("Province_State", "Country_Region")) %>%
+  select(-c(UID, FIPS))  %>%
+  select(Province_State, Country_Region, date,
+         cases, deaths, Population,
+         Combined_Key)
+
+
+```
+### Visualization Prep:
+```{r selectingcolumns, warning=FALSE, message=FALSE}
+US_by_state <- US %>%
+  group_by(Province_State, Country_Region, date) %>%
+  summarize(cases = sum(cases), deaths = sum(deaths),
+            Population = sum(Population)) %>%
+  mutate(deaths_per_mill = deaths *1000000 / Population)  %>%
+  select(Province_State, Country_Region, date,
+         cases, deaths, deaths_per_mill, Population) %>%
+  ungroup()
+
+US_totals <- US_by_state  %>%
+  group_by(Country_Region, date) %>%
+  summarize(cases = sum(cases), deaths = sum(deaths),
+            Population = sum(Population)) %>%
+  mutate(deaths_per_mill = deaths * 1000000 / Population) %>%
+  select(Country_Region, date,
+         cases, deaths, deaths_per_mill, Population) %>%
+  ungroup()
+
+```
+
+### Three Visualizations:
+```{r visual, warning=FALSE, message=FALSE}
+
+state <- "Arizona"
+US_by_state %>%
+  filter(Province_State == state) %>%
+  filter(cases > 0) %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_line(aes(color = "cases")) +
+  geom_point(aes(color = "cases")) +
+  geom_line(aes(y = deaths, color = "deaths")) +
+  geom_point(aes(y = deaths, color = "deaths")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = str_c("COVID19 in " , state), y = NULL)
+
+state <- "New Mexico"
+US_by_state %>%
+  filter(Province_State == state) %>%
+  filter(cases > 0) %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_line(aes(color = "cases")) +
+  geom_point(aes(color = "cases")) +
+  geom_line(aes(y = deaths, color = "deaths")) +
+  geom_point(aes(y = deaths, color = "deaths")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = str_c("COVID19 in " , state), y = NULL)
+
+state <- "Texas"
+US_by_state %>%
+  filter(Province_State == state) %>%
+  filter(cases > 0) %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_line(aes(color = "cases")) +
+  geom_point(aes(color = "cases")) +
+  geom_line(aes(y = deaths, color = "deaths")) +
+  geom_point(aes(y = deaths, color = "deaths")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = str_c("COVID19 in " , state), y = NULL)
+
+state <- "Montana"
+US_by_state %>%
+  filter(Province_State == state) %>%
+  filter(cases > 0) %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_line(aes(color = "cases")) +
+  geom_point(aes(color = "cases")) +
+  geom_line(aes(y = deaths, color = "deaths")) +
+  geom_point(aes(y = deaths, color = "deaths")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = str_c("COVID19 in " , state), y = NULL)
+
+#-------------------------------------------------------------------------------
+state <- "North Dakota"
+US_by_state %>%
+  filter(Province_State == state) %>%
+  filter(cases > 0) %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_line(aes(color = "cases")) +
+  geom_point(aes(color = "cases")) +
+  geom_line(aes(y = deaths, color = "deaths")) +
+  geom_point(aes(y = deaths, color = "deaths")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = str_c("COVID19 in " , state), y = NULL)
+
+#-------------------------------------------------------------------------------
+state <- "Minnesota"
+US_by_state %>%
+  filter(Province_State == state) %>%
+  filter(cases > 0) %>%
+  ggplot(aes(x = date, y = cases)) +
+  geom_line(aes(color = "cases")) +
+  geom_point(aes(color = "cases")) +
+  geom_line(aes(y = deaths, color = "deaths")) +
+  geom_point(aes(y = deaths, color = "deaths")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = str_c("COVID19 in " , state), y = NULL)
+
+
+```
+### MODEL:
+```{r model, warning=FALSE, message=FALSE}
+
+US_state_totals <- US_by_state %>%
+  group_by(Province_State) %>%
+  summarize(deaths = max(deaths), cases = max(cases),
+            population = max(Population),
+            cases_per_thou = 1000* cases / population,
+            deaths_per_thou = 1000 * deaths / population) %>%
+  filter(cases > 0, population > 0)
+
+
+#-------------------------------------------------------------------------------
+# Best states:
+#-------------------------------------------------------------------------------
+US_state_totals %>%
+  slice_min(deaths_per_thou, n = 10) %>%
+  select(deaths_per_thou, cases_per_thou, everything())
+
+#-------------------------------------------------------------------------------
+# Worst states:
+#-------------------------------------------------------------------------------
+US_state_totals %>%
+  slice_max(deaths_per_thou, n = 10) %>%
+  select(deaths_per_thou, cases_per_thou, everything())
+
+
+
+
+mod <- lm(deaths_per_thou ~ cases_per_thou, data = US_state_totals)
+
+x_grid <- seq(1, 151)
+new_df <- tibble(cases_per_thou = x_grid)
+US_state_totals %>% mutate(pred = predict(mod))
+
+#-------------------------------------------------------------------------------
+US_tot_w_pred <- US_state_totals %>% mutate(pred = predict(mod))
+US_tot_w_pred %>% ggplot() +
+  geom_point(aes(x = cases_per_thou, y = deaths_per_thou), color = "blue") +
+  geom_point(aes(x = cases_per_thou, y = pred), color = "red")
+
+```
+
+### Plots: Snap Short of Three States Review:
+
+I was interested in the three upper northern states and three lower states, partly because of the climate. As you can see from the three upper states, there seems to be a difference in the onset of the COVID19 between Minnesota compared with North Dakota and Montana, which both of these states were a little bit more gradual compared to Minnesota.  Minnesota had very similar onset attributes to Texas and Arizona. 
+
+
+### Model:
+
+Earlier-on in the model, you can see that the predictions are quite accurate, however as time goes on the spread becomes more defined, also outliers are seen readily.
+
+
+### Conclusion:
+
+Conclusion of the John Hopkins (JH) COVID19 data: As expected, the data has many facets that can be shown in various ways. Though, an impressive amount of data, one needs to question if all variables are accounted for some real understanding of what makes up the details of COVID19. Tracking and understanding the data is shown here but I found myself questioning what this was really telling me. Obviously, you can see that the start of COVID19 was very fast, and rather maintained a consistent pattern, which holds true throughout the period examined. In regards to properties that would be interesting in the future to study would be the correlation between: mask wearing, school interactions (of all grades and classification), public gatherings and such said items that would provide depth.  
+
+
+### Bias: 
+
+This entire project is very much subject to all sorts of biasness. The data collection methods need to be examined to see if data was indeed collected correctly, personal bias from the collectors need to be accounted for as well. The nature of COVID19 leads itself also to people not reporting said issues, affects, interactions, as well as wrong doings. 
